@@ -48,7 +48,7 @@
         consoleObj.scrollTop = consoleObj.scrollHeight;
     }
 
-    // Helper function to read browser cookies securely
+    // Helper function to read browser cookies
     function getCookie(name) {
         const value = `; ${document.cookie}`;
         const parts = value.split(`; ${name}=`);
@@ -56,14 +56,13 @@
         return null;
     }
 
-    // State management tracking variables
     let isListenerAttached = false;
     let pendingPayload = null;
 
     function executeSingleHit(email, tags) {
         writeLog("Processing data package...");
 
-        // A. Clear old ID to enforce fresh tracking evaluation by Mautic
+        // A. Clear old ID to ensure Mautic evaluates the browser session fresh locally
         mt('set', 'id', null);
 
         // B. Standard tracking definitions
@@ -76,7 +75,11 @@
             'page_title': article,
             'page_url': forcedUrl,
             'email': email,
-            'tags': tags
+            'tags': tags,
+            // --- THE FIX ---
+            // 'lead_only': 1 forces Mautic's tracking processing system into Kiosk/Event mode.
+            // This prevents the server from evaluating and merging profiles via office IP/fingerprints.
+            'lead_only': 1 
         };
 
         // D. Shoot EXACTLY ONE hit over the network
@@ -96,27 +99,28 @@
         // Setup the global confirmation interceptor EXACTLY ONCE
         if (!isListenerAttached) {
             document.addEventListener('mauticPageEventDelivered', function () {
-                // Read the mtc_id that the Mautic response just generated/updated
+                // Read the unique mtc_id that the Mautic response just generated
                 const generatedMtcId = getCookie('mtc_id') || 'Unavailable';
 
-                // Merge the ID into our logged output representation
+                // Merge the new ID into our logged output representation
                 const completeLogData = {
                     mtc_id: generatedMtcId,
                     ...pendingPayload
                 };
 
-                // Clear layout view tracking data state
+                // Reset temporary payload reference state
                 pendingPayload = null;
 
-                writeLog(`<span style="color: #ffff00;">Mautic Server Success: 1 Hit Dispatched!</span>`);
-                writeLog(`Combined Output Data:<br><span style="color: #00bfff;">${JSON.stringify(completeLogData, null, 2)}</span>`);
+                writeLog(`<span style="color: #ffff00;">Mautic Server Success: Distinct Hit Logged!</span>`);
+                writeLog("Combined Output Data (Kiosk-mode Isolation active):");
+                writeLog(`<span style="color: #00bfff;">${JSON.stringify(completeLogData, null, 2)}</span>`);
             });
             isListenerAttached = true;
         }
 
         // Re-use current execution framework safely if already pulled into DOM
         if (typeof mt === 'function' && window.MauticTrackingObject) {
-            writeLog("Mautic instance found active. Firing sync...");
+            writeLog("Mautic instance found active. Firing isolated sync...");
             executeSingleHit(email, tags);
             return;
         }
